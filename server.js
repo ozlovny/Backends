@@ -16,7 +16,7 @@ app.use(express.json());
 const registeredNumbers = ['+375000', '+375001'];
 const VERIFY_CODE = '11111';
 const sessions = new Map(); // phoneNumber -> sessionId
-const messages = []; // История сообщений
+const messages = ['+375000']; // История сообщений
 const clients = new Map(); // sessionId -> WebSocket
 
 // WebSocket обработка
@@ -244,4 +244,5 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // Экспорт для тестирования
+
 module.exports = { app, server };
