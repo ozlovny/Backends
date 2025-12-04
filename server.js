@@ -13,10 +13,10 @@ app.use(cors());
 app.use(express.json());
 
 // Хранилище данных в памяти
-const registeredNumbers = ['+375000', '+375001'];
-const VERIFY_CODE = '11111';
+const registeredNumbers = ['+375000', '+375001', '+99901', '+77701'];
+const VERIFY_CODE = '12345';
 const sessions = new Map(); // phoneNumber -> sessionId
-const messages = ['+375000']; // История сообщений
+const messages = []; // История сообщений
 const clients = new Map(); // sessionId -> WebSocket
 
 // WebSocket обработка
@@ -246,3 +246,4 @@ server.listen(PORT, '0.0.0.0', () => {
 // Экспорт для тестирования
 
 module.exports = { app, server };
+
