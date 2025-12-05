@@ -103,6 +103,19 @@ wss.on('connection', (ws) => {
           return;
         }
         
+        // Проверяем существует ли получатель, если нет - создаём
+        let recipient = users.find(u => u.phoneNumber === message.to);
+        if (!recipient) {
+          recipient = {
+            phoneNumber: message.to,
+            username: null,
+            registeredAt: new Date().toISOString()
+          };
+          users.push(recipient);
+          saveUsers();
+          console.log(`✨ Создан новый пользователь через сообщение: ${message.to}`);
+        }
+        
         const newMessage = {
           id: `msg_${Date.now()}_${Math.random()}`,
           from: userPhone,
@@ -147,26 +160,39 @@ app.post('/api/auth/check-phone', (req, res) => {
     return res.status(400).json({ error: 'Номер телефона обязателен' });
   }
   
-  const user = users.find(u => u.phoneNumber === phoneNumber);
+  // Ищем существующего пользователя
+  let user = users.find(u => u.phoneNumber === phoneNumber);
   
-  if (user) {
-    const code = generateCode();
-    activeCodes.set(phoneNumber, code);
-    
-    console.log(`\n==========================================`);
-    console.log(`📱 ВХОД В АККАУНТ: ${phoneNumber}`);
-    console.log(`🔑 КОД ДОСТУПА: ${code}`);
-    console.log(`==========================================\n`);
-    
-    // Удаляем код через 5 минут
-    setTimeout(() => {
-      activeCodes.delete(phoneNumber);
-    }, 5 * 60 * 1000);
-    
-    res.json({ registered: true, message: 'Код отправлен в консоль сервера' });
-  } else {
-    res.json({ registered: false, message: 'Номер не зарегистрирован' });
+  // Если пользователя нет - создаём нового
+  if (!user) {
+    user = {
+      phoneNumber: phoneNumber,
+      username: null,
+      registeredAt: new Date().toISOString()
+    };
+    users.push(user);
+    saveUsers();
+    console.log(`✨ Создан новый пользователь: ${phoneNumber}`);
   }
+  
+  const code = generateCode();
+  activeCodes.set(phoneNumber, code);
+  
+  console.log(`\n==========================================`);
+  console.log(`📱 ВХОД В АККАУНТ: ${phoneNumber}`);
+  console.log(`🔑 КОД ДОСТУПА: ${code}`);
+  console.log(`==========================================\n`);
+  
+  // Удаляем код через 5 минут
+  setTimeout(() => {
+    activeCodes.delete(phoneNumber);
+  }, 5 * 60 * 1000);
+  
+  res.json({ 
+    registered: true, 
+    isNew: !user.username,
+    message: 'Код отправлен в консоль сервера' 
+  });
 });
 
 // Верификация кода
@@ -271,7 +297,7 @@ app.get('/api/users', (req, res) => {
   res.json({ users: usersList });
 });
 
-// Поиск пользователей
+// Поиск пользователей (включая поиск по несуществующим номерам)
 app.get('/api/users/search', (req, res) => {
   const { sessionId, query } = req.query;
   
@@ -286,9 +312,10 @@ app.get('/api/users/search', (req, res) => {
     return res.status(401).json({ error: 'Сессия не найдена' });
   }
   
-  const searchQuery = query.toLowerCase();
+  const searchQuery = query.toLowerCase().trim();
   
-  const results = users
+  // Поиск среди существующих пользователей
+  let results = users
     .filter(u => u.phoneNumber !== userPhone)
     .filter(u => {
       const phoneMatch = u.phoneNumber.toLowerCase().includes(searchQuery);
@@ -298,8 +325,28 @@ app.get('/api/users/search', (req, res) => {
     .map(u => ({
       phoneNumber: u.phoneNumber,
       username: u.username,
+      exists: true,
       lastMessage: getLastMessage(userPhone, u.phoneNumber)
     }));
+  
+  // Если запрос похож на номер телефона и не найден в базе - добавляем как новый
+  const isPhoneNumberQuery = /^[\+\d\s\-\(\)]+$/.test(searchQuery);
+  
+  if (isPhoneNumberQuery && searchQuery.length >= 5) {
+    const cleanQuery = searchQuery.replace(/[\s\-\(\)]/g, '');
+    const existsInResults = results.some(r => r.phoneNumber.includes(cleanQuery));
+    
+    if (!existsInResults && cleanQuery !== userPhone) {
+      // Добавляем как потенциальный новый контакт
+      results.unshift({
+        phoneNumber: searchQuery,
+        username: null,
+        exists: false,
+        isNewContact: true,
+        lastMessage: null
+      });
+    }
+  }
   
   res.json({ users: results });
 });
